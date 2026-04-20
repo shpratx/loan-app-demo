@@ -1,4 +1,3 @@
-
 # Payments & Lending Domain Knowledge Base
 ### kb-L2-payments-domain v1.0.0
 ### Domain knowledge for UK consumer lending. All agents creating epics, stories, or designs for lending products MUST ground their decisions in this KB.
@@ -39,7 +38,7 @@
 
 | State | Trigger | Validations | Next States | Timeout |
 |---|---|---|---|---|
-| **Draft** | Customer starts application | None | Submitted | 30 days → auto-delete |
+| **Draft** | Customer starts application | None | Submitted, Abandoned | 30 days inactivity → Abandoned. Abandoned apps: data retained 90 days (customer can resume), then purged. Customer notified at 7 days and 21 days of inactivity. |
 | **Submitted** | Customer completes & submits | All mandatory fields populated, consent captured | IdentityVerification | — |
 | **IdentityVerification** | Submission accepted | KYC provider call, PEP/sanctions screen, document check | CreditCheck (pass), Referred (inconclusive), Closed (fail) | 7 days → Closed |
 | **CreditCheck** | Identity verified | CRA hard search, scorecard evaluation, policy rules | AffordabilityCheck (pass), Referred (marginal), Closed (decline) | — |
@@ -274,6 +273,16 @@ Result must be ≥ 0 for approval. Lenders typically require a buffer (e.g., ≥
 - Regulatory position: FCA supports Open Banking for affordability but it must not be the ONLY method offered — customers who don't want to share bank data must have an alternative (document upload)
 - Risk indicators detected via Open Banking: gambling transactions (vulnerability marker), payday loan usage (financial stress), returned Direct Debits (cash flow issues), county court payments (existing CCJs)
 - PM IMPLICATION: Open Banking affordability is a major feature set — consent flow, bank selection, transaction retrieval, categorisation display (show customer what was detected), manual override (customer can dispute categorisation), and fallback to document upload. Stories must cover the happy path AND the customer who declines Open Banking.
+
+### Debt Burden Ratio (DBR)
+
+- DBR = Total monthly debt obligations / Net monthly income × 100
+- Debt obligations include: all existing loan repayments, credit card minimum payments, hire purchase, the proposed new loan repayment
+- UK: no statutory DBR cap, but FCA expects affordability assessment to ensure repayments are sustainable. Typical lender policy: DBR should not exceed 40-50% after the new loan.
+- Saudi Arabia (SAMA): DBR cap of 33% of gross salary for personal finance, 65% including mortgage. These are regulatory limits, not guidelines.
+- Multiple loans with same lender: total exposure must be assessed. If customer already has a loan, the combined repayment must still be within DBR limits.
+- DBR calculation must use verified income (not self-declared) for loans above the verification threshold.
+- PM IMPLICATION: the affordability engine must calculate DBR including the proposed loan. If DBR exceeds the limit, the application must be declined or the offered amount reduced. Stories must cover: DBR calculation display for underwriters, auto-decline when DBR exceeded, and the scenario where reducing the loan amount brings DBR within limits (counter-offer).
 
 ### Responsible Lending Obligation
 
@@ -520,6 +529,15 @@ This waterfall is standard industry practice and must be clearly disclosed in th
 - Customer chooses: **shorter term** (same monthly payment, fewer months) or **lower payment** (same term, reduced monthly amount)
 - No fee for overpayment (distinct from early settlement — overpayment is partial, settlement is full)
 - Schedule recalculated and new schedule provided to customer
+
+#### Salary Date & Payment Scheduling
+
+- Salary date is collected during application to align Direct Debit collection with income receipt.
+- Validation: salary date should be cross-referenced against bank statement data (if Open Banking is used) or employer payroll cycle.
+- If salary date falls on a weekend or bank holiday, the DD collection should be scheduled for the next working day.
+- If customer provides incorrect salary date, DD collections may fail due to insufficient funds. System should detect pattern of DD failures and prompt customer to update salary date.
+- Payment date change: customer can request to change their payment date (once per 12 months is typical). New date takes effect from the next billing cycle.
+- PM IMPLICATION: stories must cover salary date capture during application, salary date validation against bank data, payment date change request flow, and the scenario where repeated DD failures suggest incorrect salary date.
 
 ### Collections
 
@@ -969,6 +987,17 @@ Key terms used in UK consumer lending. Agents MUST use these terms consistently.
 | PISP | Payment Initiation Service Provider — regulated entity that can initiate payments from customer's bank account under PSD2. |
 | SAR | Suspicious Activity Report — filed with National Crime Agency when fraud or money laundering is suspected. |
 | VRP | Variable Recurring Payment — Open Banking payment with variable amounts within agreed parameters. Emerging capability. |
+| AUDDIS | Automated Direct Debit Instruction Service — electronic system for setting up and cancelling Direct Debit mandates. |
+| ADDACS | Automated Direct Debit Amendment and Cancellation Service — notifies originators of changes to or cancellations of DDIs. |
+| ARUDD | Automated Return of Unpaid Direct Debits — notification that a Direct Debit collection has been returned unpaid. |
+| Counter-offer | When a customer is declined for the requested amount but approved for a lower amount or different terms. |
+| DBR | Debt Burden Ratio — total monthly debt obligations divided by net monthly income. Used to assess affordability. |
+| I&E | Income and Expenditure review — detailed assessment of customer's financial situation for affordability and restructuring. |
+| Liability letter | Formal document stating outstanding loan balance, remaining term, and monthly payment. |
+| Notice of Correction | Statement (up to 200 words) a customer can add to their credit file to explain circumstances. |
+| Restructuring | Formal change to loan terms when forbearance is insufficient. Creates a new credit agreement. |
+| Settlement letter | Document confirming loan fully repaid and account closed. Issued after settlement. |
+| SFS | Standard Financial Statement — standardised format for income and expenditure reviews. |
 
 ---
 
@@ -1061,6 +1090,17 @@ What happens during the life of an active loan:
 ### Annual Percentage Rate Statement
 
 - If the actual cost of credit differs from the APR stated in the agreement by more than 1%, the lender must notify the customer (CCA s.77B)
+
+### Liability Letters & Statements on Demand
+
+- Liability letter: formal document stating the outstanding balance, remaining term, and monthly payment. Used by customers for mortgage applications, visa applications, or other financial assessments.
+- Customer can request a liability letter at any time (in-app, phone, or written request).
+- Generation: automated from loan data. Must include: customer name, loan reference, outstanding balance as of date, original loan amount, interest rate, remaining term, monthly payment amount, next payment date.
+- Delivery: PDF generated and available for download in-app. Also sent via email.
+- Turnaround: within 2 working days of request (automated generation should be instant).
+- Fee: typically free (first per year). Some lenders charge for additional copies.
+- Settlement letter: issued after loan is fully repaid. Confirms zero balance and that the account is closed. Must be provided within 14 days of settlement.
+- PM IMPLICATION: stories must cover liability letter request flow, automated PDF generation, in-app download, email delivery, and settlement letter generation post-closure. The liability letter is a common customer request that is often missing from initial builds.
 
 ### Communication Preferences
 
@@ -1237,3 +1277,72 @@ When the lender owes money to the customer:
 ### PM IMPLICATION
 
 Refunds are often forgotten in product builds but are a regulatory requirement. Stories must cover: overpayment refund (automatic detection and processing), post-settlement DD refund (detect DD after settlement, auto-refund), compensation payment (manual trigger from complaints team), fee reversal (operations tool), and the edge case of refunding to a closed account. The refund status must be visible to the customer in their dashboard.
+
+---
+
+## PD24: Credit Reporting Obligations
+
+Lender's duty to report accurate data to Credit Reference Agencies:
+
+### Monthly Reporting
+
+- Lenders must report account data to CRAs (Experian, Equifax, TransUnion) monthly.
+- Data reported: account status (active, settled, defaulted), current balance, credit limit, payment status (up to date, 1 month arrears, 2 months, etc.), payment amount, account open date, settlement date.
+- Reporting must be accurate and timely — within 5 working days of month-end.
+- Incorrect reporting can result in FCA enforcement action and customer complaints.
+
+### What Triggers CRA Updates
+
+| Event | CRA Update | Timing |
+|---|---|---|
+| Loan disbursed | New account reported | Next monthly report |
+| Payment received | Payment status updated, balance reduced | Next monthly report |
+| Payment missed | Arrears marker added | Next monthly report |
+| Default registered | Default marker added (stays 6 years) | Within 5 working days |
+| Loan settled | Account marked as settled, balance zero | Within 30 days |
+| Early settlement | Account marked as settled early | Within 30 days |
+| Forbearance arrangement | Arrangement flag added | Next monthly report |
+| Address change | New address linked | Next monthly report |
+
+### Customer Disputes
+
+- Customer can dispute data with CRA or lender. Lender must investigate within 28 days.
+- If data is wrong: correct and notify CRA. If correct: explain to customer.
+- During investigation, CRA may add a "notice of dispute".
+- GDPR Article 16: customer has right to have inaccurate data corrected without undue delay.
+
+### PM IMPLICATION
+
+Credit reporting is an ongoing operational obligation. Stories must cover: monthly CRA reporting batch job, real-time CRA updates for defaults and settlements, customer dispute handling workflow, and CRA data accuracy monitoring.
+
+---
+
+## PD25: Loan Restructuring
+
+When forbearance is insufficient and loan terms need formal change:
+
+### Restructuring Options
+
+| Option | Description | Impact |
+|---|---|---|
+| Term extension | Extend repayment period | Lower monthly payment, more total interest |
+| Rate reduction | Reduce interest rate | Lower monthly payment |
+| Balance write-down | Write off portion of balance | Reduced debt, lender takes loss |
+| Capitalisation of arrears | Add arrears to balance, recalculate | Clears arrears status, higher balance |
+
+### Legal Requirements
+
+- Creates a NEW credit agreement (CCA s.82). Original superseded.
+- New agreement must contain all prescribed terms (CCA s.61).
+- New PCCI required. New 14-day cooling-off period.
+- CRA updated with restructured status.
+
+### Income & Expenditure Review
+
+- Full I&E review required before restructuring.
+- Standard Financial Statement (SFS) format used by debt advice sector.
+- If customer has a debt advisor, their I&E should be accepted.
+
+### PM IMPLICATION
+
+Restructuring needs: I&E collection form, restructuring option calculation, old vs new terms comparison display, new agreement signing flow, CRA update, and updated repayment schedule.
