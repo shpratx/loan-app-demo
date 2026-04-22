@@ -208,3 +208,90 @@ After generating your complete output, perform this self-review:
 
 ### B10.2 Revise Before Return
 If any check fails, REVISE the output before returning. Do not flag issues without fixing them.
+# Evaluation Thresholds — Default Configuration
+# Part of kb-L0-agent-quality-standards
+# These defaults are enforced when an agent spec does not override them.
+
+---
+
+## B11: Evaluation Thresholds
+
+All agent outputs are evaluated by LLM-as-Judge across 20 evaluators. Each evaluator has a default threshold below. Agents inherit these defaults automatically. Developers may override specific thresholds in their agent spec — omitted evaluators always use the default.
+
+### Default Thresholds
+
+#### Gate Evaluators (mandatory — fail blocks deployment)
+
+| Evaluator | Direction | Default | Override Guidance |
+|---|---|---|---|
+| **Faithfulness** | higher_is_better ≥ | **0.90** | Tighten to 0.95 for regulated/compliance output. Never relax below 0.85. |
+| **Hallucination** | lower_is_better ≤ | **0.10** | Tighten to 0.05 for financial/regulatory output. Never relax above 0.15. |
+| **Correctness** | higher_is_better ≥ | **0.80** | Tighten to 0.90 for financial calculations, code generation. |
+| **Relevance** | higher_is_better ≥ | **0.85** | Tighten to 0.90 for user-facing output. |
+| **Toxicity** | lower_is_better ≤ | **0.05** | NEVER relax. Override to 0.02 for customer-facing agents. |
+| **Topic Adherence Evaluation** | higher_is_better ≥ | **0.95** | Relax to 0.90 only for creative/exploratory agents with approval. |
+| **Topic Adherence Refusal** | higher_is_better ≥ | **0.95** | NEVER relax. Security-critical. |
+| **Consistency** | higher_is_better ≥ | **0.85** | Tighten to 0.90 for multi-item outputs (stories, test cases). |
+
+#### Recommended Evaluators (fail triggers warning + HITL review)
+
+| Evaluator | Direction | Default | Override Guidance |
+|---|---|---|---|
+| **Answer Correctness** | higher_is_better ≥ | **0.85** | Tighten to 0.90 for code and API spec agents. |
+| **Answer Critic** | higher_is_better ≥ | **0.75** | Tighten to 0.85 for architecture (HLD/LLD) agents. |
+| **Answer Relevance** | higher_is_better ≥ | **0.80** | Tighten for agents answering specific questions. |
+| **Helpfulness** | higher_is_better ≥ | **0.80** | Relax to 0.70 for internal/technical agents. Tighten for user-facing. |
+| **Context Correctness** | higher_is_better ≥ | **0.85** | Tighten to 0.90 for compliance-related agents. |
+| **Context Relevance** | higher_is_better ≥ | **0.80** | Measures RAG retrieval quality. Low = KB needs improvement. |
+| **Context Recall** | higher_is_better ≥ | **0.80** | Low recall = KB has gaps. Tighten to 0.90 for critical domains. |
+| **Goal Accuracy** | higher_is_better ≥ | **0.85** | Also measured at workflow level (end-to-end). |
+| **Simple Criteria** | higher_is_better ≥ | **0.90** | Custom business rules are binary — high bar appropriate. |
+| **SQL Semantic Equivalence** | higher_is_better ≥ | **0.95** | Near-exact for schema/query generation. |
+
+#### Tracked Evaluators (logged for dashboards — no action on failure)
+
+| Evaluator | Direction | Default | Override Guidance |
+|---|---|---|---|
+| **Conciseness** | higher_is_better ≥ | **0.70** | Relax to 0.60 for design docs (HLD, LLD). Tighten to 0.80 for stories. |
+| **Context Precision** | higher_is_better ≥ | **0.70** | Measures token efficiency. Low = too much KB loaded. |
+
+### Override Rules
+
+1. Developers override thresholds in their agent spec under `EVALUATION_THRESHOLDS`.
+2. Omitted evaluators inherit the default from this KB.
+3. Gate evaluators can be tightened (stricter) freely. Relaxing requires Security review.
+4. Toxicity and Topic Adherence Refusal defaults must NEVER be relaxed.
+5. Recommended evaluators can be tightened or relaxed freely.
+6. Tracked evaluators can be promoted to Recommended or Gate by the developer.
+7. The platform merges: developer overrides + KB defaults → every evaluator has a threshold.
+
+### Machine-Readable Defaults
+
+```yaml
+evaluation_defaults:
+  gate:
+    faithfulness:              {direction: higher_is_better, threshold: 0.90, min_allowed: 0.85}
+    hallucination:             {direction: lower_is_better,  threshold: 0.10, max_allowed: 0.15}
+    correctness:               {direction: higher_is_better, threshold: 0.80, min_allowed: 0.70}
+    relevance:                 {direction: higher_is_better, threshold: 0.85, min_allowed: 0.75}
+    toxicity:                  {direction: lower_is_better,  threshold: 0.05, max_allowed: 0.05, locked: true}
+    topic_adherence_eval:      {direction: higher_is_better, threshold: 0.95, min_allowed: 0.90}
+    topic_adherence_refusal:   {direction: higher_is_better, threshold: 0.95, min_allowed: 0.95, locked: true}
+    consistency:               {direction: higher_is_better, threshold: 0.85, min_allowed: 0.75}
+
+  recommended:
+    answer_correctness:        {direction: higher_is_better, threshold: 0.85}
+    answer_critic:             {direction: higher_is_better, threshold: 0.75}
+    answer_relevance:          {direction: higher_is_better, threshold: 0.80}
+    helpfulness:               {direction: higher_is_better, threshold: 0.80}
+    context_correctness:       {direction: higher_is_better, threshold: 0.85}
+    context_relevance:         {direction: higher_is_better, threshold: 0.80}
+    context_recall:            {direction: higher_is_better, threshold: 0.80}
+    goal_accuracy:             {direction: higher_is_better, threshold: 0.85}
+    simple_criteria:           {direction: higher_is_better, threshold: 0.90}
+    sql_semantic_equivalence:  {direction: higher_is_better, threshold: 0.95}
+
+  tracked:
+    conciseness:               {direction: higher_is_better, threshold: 0.70}
+    context_precision:         {direction: higher_is_better, threshold: 0.70}
+```
